@@ -8,12 +8,19 @@ Print all files in given directory trees sorted by time of last access, change,
  or modification. Files are sorted by access time from oldest to newest by default.
 
 OPTIONS:
+
  -a -c -m    : Sort by time last of access, change, or modification.
+
  -l          : Include columns for date and time.
+
  -n NUMBER   : List only the first NUMBER lines.
+
  -r          : Reverse sort order, newest files first.
+
  -p GLOB     : Print only files matching GLOB.
+
  -y INTERVAL : Show files younger than INTERVAL.
+
  -z INTERVAL : Show files older than than INTERVAL.
 
 # EXAMPLES
