@@ -18,19 +18,24 @@ OPTIONS:
 
 # EXAMPLES
 Show the least and most recently accessed file here.
- $ aged -n1; aged -r -n1
+
+`$ aged -n1; aged -r -n1`
 
 Show the path and timestamp of the ten most recently modified files "~/foo".
- $ aged -m -l -n10 ~/foo
+
+`$ aged -m -l -n10 ~/foo`
 
 Show files modified more than two days but less than three weeks ago.
- $ aged -m -z 2d -y 3w
+
+`$ aged -m -z 2d -y 3w`
 
 View the six most recently accessed JPEGs in the given directory.
- $ feh -Z -f <(aged -a -n6 -p '*.jpg' ~/img/)
+
+`$ feh -Z -f <(aged -a -n6 -p '*.jpg' ~/img/)`
 
 Play the oldest OGG video in the given directory.
- $ mpv $(aged -m -p '*.ogg' -n1 ~/videos/)
+
+`$ mpv $(aged -m -p '*.ogg' -n1 ~/videos/)`
 
 # AUTHOR
 Mike Lalumiere 2018
