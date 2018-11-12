@@ -1,0 +1,209 @@
+#!/bin/bash
+# aged - Find files sorted by timestamp metadata.
+# © Mike Lalumiere 2018
+
+# set -x
+ti() {
+    # usage
+    read -r -d '' use <<EOF
+USAGE: ti [OPTIONS] INTERVAL
+Parse and render this friendly temporal shorthand: ([0-9]+[UNIT][SPACE]*)+
+Given an integer number of seconds, print the interval in shorthand.
+Given a temporal shorthand string parse it into seconds.
+
+OPTIONS:
+ -a force integer interpretation
+ -b force shorthand interpretation
+
+UNITS:                  | SAMPLES:
+ y : year   h : hour    |  2h         = 7200
+ w : week   m : minute  |  4d15m6h2s  = 368102
+ d : day    s : second  |  5y3m2s     = 157788182
+
+EOF
+    # time units
+    declare -A unit
+    unit=(["y"]=31557600 ["w"]=604800 ["d"]=86400 ["h"]=3600 ["m"]=60 ["s"]=1)
+    # reverse lookup unit
+    declare -A revu
+    for key in "${!unit[@]}"; do revu["${unit[$key]}"]="$key"; done
+    # patterns
+    local keys="$(printf "%s" "${!unit[@]}")"
+    local fpat="^([0-9]+[$keys][[:space:]]*)+$"
+    # accept options
+    local mode=0
+    local opt OPTIND OPTARG
+    while getopts ":ab" opt; do
+        case "$opt" in
+            a) mode=1  ;; # integer to shorthand
+            b) mode=2  ;; # shorthand to integer
+        esac
+    done
+    shift $((OPTIND - 1))
+    # accept arguments
+    local inp="$1"
+    if [ -z "$inp" ]; then
+        printf "%s\n" "$use" >&2
+        return
+    fi
+    # convert or reverse on input string or given mode
+    if [[ "$inp" =~ ^[0-9]+$ && "$mode" != 2 ]]; then
+        # render given integer seconds into shorthand
+        local outv="" num=0
+        while read -r val; do
+            num=0
+            while :; do
+                if [[ "$inp" -eq 0 ]]; then break; fi
+                if [[ "$inp" -lt "$val" ]]; then break; fi
+                inp=$((inp - val))
+                let num++
+                continue
+            done
+            if [ "$num" -gt 0 ]; then
+                outv+="${num}${revu[$val]}"
+            fi
+        done < <(printf "%s\n" "${unit[@]}" | sort -r -n)
+        printf "%s\n" "$outv"
+    elif [[ "$inp" =~ $fpat && "$mode" != 1 ]]; then
+        # parse interval string into integer seconds
+        local secs=0 num=""
+        while read -r -n1 char; do
+            case "$char" in
+                " ") continue ;;
+                [0-9]) num="${num}${char}" ;;
+                ["$keys"]) secs=$(( secs + num * unit["$char"] )); num="" ;;
+                \?) return 2 ;;
+            esac
+        done <<< "$inp"
+        printf "%d\n" "$secs"
+    else
+        printf "Bad input '$inp'.\n%s\n" "$use" >&2
+        return 2
+    fi
+}
+
+aged() {
+    # usage
+    read -r -d '' use <<EOF
+USAGE: aged [OPTIONS] [DIRECTORY ...]
+Print all files in given directory trees sorted by time of last access, change,
+ or modification. Files are sorted by access time from oldest to newest by default.
+
+OPTIONS:
+ -a -c -m    : Sort by time last of access, change, or modification.
+ -l          : Include columns for date and time.
+ -n NUMBER   : List only the first NUMBER lines.
+ -r          : Reverse sort order, newest files first.
+ -p GLOB     : Print only files matching GLOB.
+ -y INTERVAL : Show files younger than INTERVAL.
+ -z INTERVAL : Show files older than than INTERVAL.
+
+EXAMPLES:
+Show the least and most recently accessed file here.
+ $ aged -n1; aged -r -n1
+Show the path and timestamp of the ten most recently modified files "~/foo".
+ $ aged -m -l -n10 ~/foo
+Show files modified more than two days but less than three weeks ago.
+ $ aged -m -z 2d -y 3w
+View the six most recently accessed JPEGs in the given directory.
+ $ feh -Z -f <(aged -a -n6 -p '*.jpg' ~/img/)
+Play the oldest OGG video in the given directory.
+ $ mpv \$(aged -m -p '*.ogg' -n1 ~/videos/)
+
+EOF
+    # requirements
+    if ! type sort find &>/dev/null; then
+        echo "Core utilities find and sort are required!" >&2
+        return 255
+    fi
+    # accept options
+    local mode=1 num=0 pat='*' yng="" rev long
+    local opt OPTIND OPTARG
+    while getopts ":achmn:p:rly:z:" opt; do
+        case "$opt" in
+            # sort mode
+            a) mode=1        ;; # consider atime
+            c) mode=2        ;; # consider ctime
+            m) mode=3        ;; # consider mtime
+            # options
+            n) num="$OPTARG" ;; # first N lines
+            p) pat="$OPTARG" ;; # glob pattern
+            l) long="yes"    ;; # longer output
+            r) rev="yes"     ;; # reverse sort
+            y) yng="$OPTARG" ;; # younger than
+            z) old="$OPTARG" ;; # older than
+            h) # help
+                printf "%s\n" "$use" >&2
+                return
+                ;;
+            \?) # invalid option
+                printf "Bad option: -%s\n %s\n" "$OPTARG" "$use" >&2
+                return 2
+                ;;
+        esac
+    done
+    shift $((OPTIND - 1))
+    # check number option
+    if ! [[ "$num" =~ ^[0-9]+$ ]]; then
+        echo "Argument to -n must be a number!" >&2
+        return 3
+    fi
+    # handle younger-than option
+    local this
+    if [ -n "$yng" ]; then
+        if ! [[ "$yng" =~ ^[0-9]+$ ]]; then
+            this=$(ti "$yng")
+            if [ -z "$this" ]; then
+                printf "%s\n" "Could not make sense of $yng." >&2
+                return 3
+            fi
+            yng="$this"
+        fi
+    fi
+    # handle older-than option
+    if [ -n "$old" ]; then
+        if ! [[ "$old" =~ ^[0-9]+$ ]]; then
+            this=$(ti "$old")
+            if [ -z "$this" ]; then
+                printf "%s\n" "Could not make sense of $old." >&2
+                return 3
+            fi
+            old="$this"
+        fi
+    fi
+    # accept directory arguments
+    declare -a dirs
+    for dir in "$@"; do
+        if ! [ -d "$dir" ]; then
+            printf "%s is not a directory\n" "$dir" >&2
+            return 3
+        else
+            dirs+=("$dir")
+        fi
+    done
+    # by default search the current directory
+    if [ -z "${dirs[@]}" ]; then
+        dirs+="."
+    fi
+    # output paths with find stat: atime mtime ctime path
+    local ind=0
+    while read a c m f && [[ "$num" == 0 || "$((ind++))" -lt "$num" ]]; do
+        # figure things out
+        local now="$(printf "%(%s)T")"
+        local when=(" " "$a" "$c" "$m")
+        local then="${when[$mode]}"
+        local since=$((now - then))
+        # filter results maybe
+        if [ -n "$yng" ] && [[ "$yng" -lt "$since" ]]; then continue; fi
+        if [ -n "$old" ] && [[ "$old" -gt "$since" ]]; then continue; fi
+        # output long or short
+        if [ -n "$long" ]; then
+            printf "%(%F %T)T %s %s\n" "$then" "$(ti "$since")" "$f"
+        else
+            printf "%s\n" "$f"
+        fi
+    done < <(find "${dirs[@]}" -type f -iname "$pat" -printf '%As %Cs %Ts %p\n' |
+                    eval sort "${rev+-r}" -n -k "$mode")
+}
+# run it unless sourced
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then aged "$@"; fi
