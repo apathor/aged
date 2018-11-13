@@ -1,51 +1,60 @@
 # NAME
 aged - Find files sorted by timestamp metadata.
 
-# SYNOPSIS
-aged [OPTIONS] [DIRECTORY ...]
 
+# SYNOPSIS
+This script is composed of two functions 'aged' and 'ti'.
+
+
+aged [OPTIONS] [DIRECTORY ...]
 Print all files in given directory trees sorted by time of last access, change,
  or modification. Files are sorted by access time from oldest to newest by default.
 
 OPTIONS:
-
  -a -c -m    : Sort by time last of access, change, or modification.
-
  -l          : Include columns for date and time.
-
  -n NUMBER   : List only the first NUMBER lines.
-
  -r          : Reverse sort order, newest files first.
-
  -p GLOB     : Print only files matching GLOB.
-
  -y INTERVAL : Show files younger than INTERVAL.
-
  -z INTERVAL : Show files older than than INTERVAL.
+
+
+ti [OPTIONS] INTERVAL
+Parse and render this friendly temporal shorthand: ([0-9]+[UNIT][SPACE]*)+
+Given an integer number of seconds, print the interval in shorthand.
+Given a temporal shorthand string parse it into seconds.
+
+OPTIONS:
+ -a force integer interpretation
+ -b force shorthand interpretation
+
+UNITS:                  | SAMPLES:
+ y : year   h : hour    |  2h         = 7200
+ w : week   m : minute  |  4d15m6h2s  = 368102
+ d : day    s : second  |  5y3m2s     = 157788182
+
 
 # EXAMPLES
 Show the least and most recently accessed file here.
-
-`$ aged -n1; aged -r -n1`
+ $ aged -n1; aged -r -n1
 
 Show the path and timestamp of the ten most recently modified files "~/foo".
-
-`$ aged -m -l -n10 ~/foo`
+ $ aged -m -l -n10 ~/foo
 
 Show files modified more than two days but less than three weeks ago.
-
-`$ aged -m -z 2d -y 3w`
+ $ aged -m -z 2d -y 3w
 
 View the six most recently accessed JPEGs in the given directory.
-
-`$ feh -Z -f <(aged -a -n6 -p '*.jpg' ~/img/)`
+ $ feh -Z -f <(aged -a -n6 -p '*.jpg' ~/img/)
 
 Play the oldest OGG video in the given directory.
+ $ mpv \$(aged -m -p '*.ogg' -n1 ~/videos/)
 
-`$ mpv $(aged -m -p '*.ogg' -n1 ~/videos/)`
 
 # AUTHOR
 Mike Lalumiere 2018
+
 
 # License
 GPLv3 (see LICENSE)
