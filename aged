@@ -91,6 +91,7 @@ Print all files in given directory trees sorted by time of last access, change,
 
 OPTIONS:
  -a -c -m    : Sort by time last of access, change, or modification.
+ -d          : Limit results to directories.
  -l          : Include columns for date and time.
  -n NUMBER   : List only the first NUMBER lines.
  -r          : Reverse sort order, newest files first.
@@ -117,15 +118,16 @@ EOF
         return 255
     fi
     # accept options
-    local mode=1 num=0 pat='*' yng="" rev long
+    local mode=1 num=0 pat='*' yng="" kind='f' rev long
     local opt OPTIND OPTARG
-    while getopts ":achmn:p:rly:z:" opt; do
+    while getopts ":acdhmn:p:rly:z:" opt; do
         case "$opt" in
             # sort mode
             a) mode=1        ;; # consider atime
             c) mode=2        ;; # consider ctime
             m) mode=3        ;; # consider mtime
             # options
+            d) kind='d'      ;; # find directories
             n) num="$OPTARG" ;; # first N lines
             p) pat="$OPTARG" ;; # glob pattern
             l) long="yes"    ;; # longer output
@@ -202,7 +204,7 @@ EOF
         else
             printf "%s\n" "$f"
         fi
-    done < <(find "${dirs[@]}" -type f -iname "$pat" -printf '%As %Cs %Ts %p\n' |
+    done < <(find "${dirs[@]}" -type "$kind" -iname "$pat" -printf '%As %Cs %Ts %p\n' |
                     eval sort "${rev+-r}" -n -k "$mode")
 }
 # run it unless sourced
