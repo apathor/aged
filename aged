@@ -30,6 +30,7 @@ EOF
     # patterns
     local keys="$(printf "%s" "${!unit[@]}")"
     local fpat="^([0-9]+[$keys][[:space:]]*)+$"
+    local ipat="^[0-9]+$"
     # accept options
     local mode=0
     local opt OPTIND OPTARG
@@ -46,22 +47,17 @@ EOF
         printf "%s\n" "$use" >&2
         return
     fi
-    # convert or reverse on input string or given mode
-    if [[ "$inp" =~ ^[0-9]+$ && "$mode" != 2 ]]; then
+    # encode/decode depending on input string or given mode
+    if [[ "$inp" =~ $ipat && "$mode" != 2 ]]; then
         # render given integer seconds into shorthand
         local outv="" num=0
         while read -r val; do
-            num=0
-            while :; do
-                if [[ "$inp" -eq 0 ]]; then break; fi
-                if [[ "$inp" -lt "$val" ]]; then break; fi
-                inp=$((inp - val))
-                let num++
+            num=$((inp / val))
+            if [[ "$num" -eq 0 ]]; then
                 continue
-            done
-            if [ "$num" -gt 0 ]; then
-                outv+="${num}${revu[$val]}"
             fi
+            inp=$((inp % val))
+            outv+="${num}${revu[$val]}"
         done < <(printf "%s\n" "${unit[@]}" | sort -r -n)
         printf "%s\n" "$outv"
     elif [[ "$inp" =~ $fpat && "$mode" != 1 ]]; then
