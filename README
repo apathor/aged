@@ -1,17 +1,16 @@
 # NAME
 aged - Find files sorted by timestamp metadata.
 
-
 # SYNOPSIS
 This script is composed of two functions 'aged' and 'ti'.
 
-
-aged [OPTIONS] [DIRECTORY ...]
-Print all files in given directory trees sorted by time of last access, change,
- or modification. Files are sorted by access time from oldest to newest by default.
+aged [OPTIONS] [TARGET ...]
+List files and directories sorted by file system timestamp metadata.
 
 OPTIONS:
  -a -c -m    : Sort by time last of access, change, or modification.
+ -d          : Limit results to directories.
+ -f          : Limit results to files.
  -l          : Include columns for date and time.
  -n NUMBER   : List only the first NUMBER lines.
  -r          : Reverse sort order, newest files first.
@@ -19,42 +18,45 @@ OPTIONS:
  -y INTERVAL : Show files younger than INTERVAL.
  -z INTERVAL : Show files older than than INTERVAL.
 
+EXAMPLES:
+$ aged -n1; aged -r -n1
+  Show the least and most recently accessed file here.
+$ aged -m -l -r -n10 ~/foo
+  Show the path and timestamp of the ten most recently modified files "~/foo".
+$ aged -m -z 2d -y 3w
+  Show files modified more than two days but less than three weeks ago.
+$ feh -Z -f <(aged -a -n6 -p '*.jpg' ~/img/)
+  View the six least recently accessed JPEGs in the given directory.
+$ mpv $(aged -m -p '*.ogg' -n1 ~/videos/)
+  Play the oldest OGG video in the given directory.
+$ aged -m -y 30d ./quux.conf || echo "not recently"
+  Check if a file has been modified within 30 days.
 
 ti [OPTIONS] INTERVAL
-Parse and render this friendly temporal shorthand: ([0-9]+[UNIT][SPACE]*)+
-Given an integer number of seconds, print the interval in shorthand.
-Given a temporal shorthand string parse it into seconds.
+Parse and render temporal shorthand.
 
-OPTIONS:
- -a force integer interpretation
- -b force shorthand interpretation
+UNITS:                  | SCALES:
+ s : second  d : day    |  D : 10e1  M : 10e6
+ m : minute  w : week   |  H : 10e2  G : 10e9
+ h : hour    y : year   |  K : 10e3  T : 10e12
 
-UNITS:                  | SAMPLES:
- y : year   h : hour    |  2h         = 7200
- w : week   m : minute  |  4d15m6h2s  = 368102
- d : day    s : second  |  5y3m2s     = 157788182
+MODES
+ -n : numeric   : output integer number of seconds in INTERVAL
+ -s : shorthand : output string shorthand of INTERVAL
+ -a : after     : output date plus INTERVAL
+ -b : before    : output date minus INTERVAL
 
+OPTIONS
+ -d TIME   : calculate dates relative to TIME
+ -f FORMAT : render dates with printf using FORMAT
 
-# EXAMPLES
-Show the least and most recently accessed file here.
- $ aged -n1; aged -r -n1
-
-Show the path and timestamp of the ten most recently modified files "~/foo".
- $ aged -m -l -n10 ~/foo
-
-Show files modified more than two days but less than three weeks ago.
- $ aged -m -z 2d -y 3w
-
-View the six most recently accessed JPEGs in the given directory.
- $ feh -Z -f <(aged -a -n6 -p '*.jpg' ~/img/)
-
-Play the oldest OGG video in the given directory.
- $ mpv \$(aged -m -p '*.ogg' -n1 ~/videos/)
-
+SAMPLE
+ 1d        : 86400 | 1Ms    : 1000000
+ 43m20s    : 2600  | 3Kh    : 259200000
+ 18h12m16s : 65536 | 2Gy    : 63115200000000000
 
 # AUTHOR
 Mike Lalumiere 2018
-
 
 # License
 GPLv3 (see LICENSE)
