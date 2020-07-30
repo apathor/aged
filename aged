@@ -6,19 +6,16 @@
 # print time with bash builtin
 ts() { printf "%(${1:-%s})T\n" "${2:--1}"; }
 
-# ti - time interval
-#
 ti() {
     # usage
     read -r -d '' use <<EOF
 USAGE: ti [OPTIONS] INTERVAL
 Parse and render temporal shorthand.
 
- 1d        : 86400 | 1Ms    : 1000000
- 43m20s    : 2600  | 3Kh    : 259200000
- 18h12m16s : 65536 | 2Gy    : 63115200000000000
-
-  ([0-9]+[SCALE][UNIT][SPACE]*)+
+UNITS:                  | SCALES:
+ s : second  d : day    |  D : 10e1  M : 10e6
+ m : minute  w : week   |  H : 10e2  G : 10e9
+ h : hour    y : year   |  K : 10e3  T : 10e12
 
 MODES
  -n : numeric   : output integer number of seconds in INTERVAL
@@ -30,10 +27,11 @@ OPTIONS
  -d TIME   : calculate dates relative to TIME
  -f FORMAT : render dates with printf using FORMAT
 
-UNITS:                  | SCALES:
- s : second  d : day    |  D : 10e1  M : 10e6
- m : minute  w : week   |  H : 10e2  G : 10e9
- h : hour    y : year   |  K : 10e3  T : 10e12
+SAMPLE
+ 1d        : 86400 | 1Ms    : 1000000
+ 43m20s    : 2600  | 3Kh    : 259200000
+ 18h12m16s : 65536 | 2Gy    : 63115200000000000
+
 EOF
     # mark current time
     local now
@@ -65,7 +63,7 @@ EOF
     # accept options
     local mode=2 fmt="%s" when=""
     local opt OPTIND OPTARG
-    while getopts ":abdf:hns" opt; do
+    while getopts ":abd:f:hns" opt; do
         case "$opt" in
             # program mode
             a) mode=4 ;; # date after given interval
@@ -118,7 +116,7 @@ EOF
                 mul=1
                 ;;
             ?)
-                # printf "Failed to parse character '%s' at '%d'.\n" "$char" "$idx" >&2
+                printf "Failed to parse character '%s' at '%d'.\n" "$char" "$idx"
                 return 2
             ;;
         esac
@@ -144,13 +142,13 @@ EOF
 aged() {
     # usage
     read -r -d '' use <<EOF
-USAGE: aged [OPTIONS] [DIRECTORY ...]
-Print all files in given directory trees sorted by time of last access, change,
- or modification. Files are sorted by access time from oldest to newest by default.
+USAGE: aged [OPTIONS] [TARGET ...]
+List files and directories sorted by file system timestamp metadata.
 
 OPTIONS:
  -a -c -m    : Sort by time last of access, change, or modification.
  -d          : Limit results to directories.
+ -f          : Limit results to files.
  -l          : Include columns for date and time.
  -n NUMBER   : List only the first NUMBER lines.
  -r          : Reverse sort order, newest files first.
@@ -159,17 +157,18 @@ OPTIONS:
  -z INTERVAL : Show files older than than INTERVAL.
 
 EXAMPLES:
-Show the least and most recently accessed file here.
- $ aged -n1; aged -r -n1
-Show the path and timestamp of the ten most recently modified files "~/foo".
- $ aged -m -l -r -n10 ~/foo
-Show files modified more than two days but less than three weeks ago.
- $ aged -m -z 2d -y 3w
-View the six least recently accessed JPEGs in the given directory.
- $ feh -Z -f <(aged -a -n6 -p '*.jpg' ~/img/)
-Play the oldest OGG video in the given directory.
- $ mpv \$(aged -m -p '*.ogg' -n1 ~/videos/)
-
+$ aged -n1; aged -r -n1
+  Show the least and most recently accessed file here.
+$ aged -m -l -r -n10 ~/foo
+  Show the path and timestamp of the ten most recently modified files "~/foo".
+$ aged -m -z 2d -y 3w
+  Show files modified more than two days but less than three weeks ago.
+$ feh -Z -f <(aged -a -n6 -p '*.jpg' ~/img/)
+  View the six least recently accessed JPEGs in the given directory.
+$ mpv \$(aged -m -p '*.ogg' -n1 ~/videos/)
+  Play the oldest OGG video in the given directory.
+$ aged -m -y 30d ./quux.conf || echo "not recently"
+  Check if a file has been modified within 30 days.
 EOF
     # check requirements
     if ! type sort find &>/dev/null; then
@@ -177,16 +176,19 @@ EOF
         return 255
     fi
     # accept options
-    local mode=1 num=0 pat='*' yng="" kind='f' rev long
+    local mode=1 num=0  old='' yng='' kind pat rev long
     local opt OPTIND OPTARG
-    while getopts ":acdhmn:p:rly:z:" opt; do
+    while getopts ":acdfhmn:p:rly:z:" opt; do
         case "$opt" in
             # sort mode
             a) mode=1        ;; # consider atime
             c) mode=2        ;; # consider ctime
             m) mode=3        ;; # consider mtime
-            d) # find directories
+            d) # find only directories
                 kind='d'
+                ;;
+            f) # find only files
+                kind='f'
                 ;;
             n) # first N lines
                 num="$OPTARG"
@@ -210,7 +212,7 @@ EOF
                     return 3
                 fi
                 ;;
-            z) # older than time
+            z) # select files older than than the given interval in the past
                 if ! old=$(ti -b "$OPTARG"); then
                     printf "Could not parse '%s' as a time interval.\n" "$OPTARG" >&2
                     return 3
@@ -221,28 +223,27 @@ EOF
                 return
                 ;;
             \?) # invalid option
-                printf "Bad option: -%s\n %s\n" "$OPTARG" "$use" >&2
+                printf "Bad option: -%s.\n %s\n" "$OPTARG" "$use" >&2
                 return 2
                 ;;
         esac
     done
     shift $((OPTIND - 1))
-    # accept directory arguments
-    declare -a dirs
-    for dir in "$@"; do
-        if ! [ -d "$dir" ]; then
-            printf "%s is not a directory\n" "$dir" >&2
+    # accept target arguments
+    declare -a tgts
+    for tgt in "$@"; do
+        if ! [ -e "$tgt" ]; then
+            printf "'%s' does not exist\n%s\n" "$tgt" "$use" >&2
             return 3
         else
-            dirs+=("$dir")
+            tgts+=("$tgt")
         fi
     done
     # by default search the current directory
-    if [ -z "${dirs[@]}" ]; then
-        dirs+=(".")
+    if ! (( ${#tgts[@]} )); then
+        tgts+=(".")
     fi
     # output paths with find stat: atime mtime ctime path
-    # TODO better handling of filenames containing whitespace
     local ind=0
     while read -r a c m f && [[ "$num" == 0 || "$ind" -lt "$num" ]]; do
         # determine current time
@@ -264,8 +265,10 @@ EOF
         fi
         # count a result
         let ind++
-    done < <(find "${dirs[@]}" -type "$kind" -iname "$pat" -printf '%As %Cs %Ts %p\n' |
-                    eval sort "${rev+-r}" -n -k "$mode")
+    done < <(eval find "${tgts[@]}" "${kind+-type \"\$kind\"}" "${pat+-iname \"\$pat\"}" '-printf "%As %Cs %Ts %p\n"' | \
+                 eval sort "${rev+-r}" -n -k "$mode")
+    # success if any results found
+    (( ind > 0 ))
 }
 # run it unless sourced
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then aged "$@"; fi
