@@ -61,7 +61,7 @@ EOF
     declare -A revu
     for key in "${!unit[@]}"; do revu["${unit[$key]}"]="$key"; done
     # accept options
-    local mode=2 fmt="%s" when=""
+    local mode=2 fmt="%s" when="$now"
     local opt OPTIND OPTARG
     while getopts ":abd:f:hns" opt; do
         case "$opt" in
@@ -71,7 +71,7 @@ EOF
             n) mode=2 ;; # number of seconds in given interval
             s) mode=1 ;; # shorthand string for given interval
             # relative epoch for date calculation
-            d) now="$OPTARG" ;;
+            d) when="$OPTARG" ;;
             # format string for date output
             f) fmt="$OPTARG" ;;
             h) # help
@@ -134,8 +134,8 @@ EOF
     case "$mode" in
         1) printf "%s\n" "$tstr" ;;
         2) printf "%d\n" "$secs" ;;
-        3) ts "$fmt" $(( now - secs )) ;;
-        4) ts "$fmt" $(( now + secs )) ;;
+        3) ts "$fmt" $(( when - secs )) ;;
+        4) ts "$fmt" $(( when + secs )) ;;
     esac
 }
 
@@ -206,13 +206,13 @@ EOF
             r) # reverse output sort by age
                 rev="yes"
                 ;;
-            y) # select files younger than the given interval in the past
+            y) # select files younger than the given interval
                 if ! yng=$(ti -b "$OPTARG"); then
                     printf "Could not parse '%s' as a time interval.\n" "$OPTARG" >&2
                     return 3
                 fi
                 ;;
-            z) # select files older than than the given interval in the past
+            z) # select files older than than the given interval
                 if ! old=$(ti -b "$OPTARG"); then
                     printf "Could not parse '%s' as a time interval.\n" "$OPTARG" >&2
                     return 3
