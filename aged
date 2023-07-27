@@ -2,9 +2,9 @@
 # aged - Find files sorted by timestamp metadata.
 # © Mike Lalumiere 2018
 
-# ts - time stamp
+# tp - time stamp
 # print time with bash builtin
-ts() { printf "%(${1:-%s})T\n" "${2:--1}"; }
+tp() { printf "%(${1:-%s})T\\n" "${2:--1}"; }
 
 ti() {
     # usage
@@ -18,14 +18,14 @@ UNITS:                  | SCALES:
  h : hour    y : year   |  K : 10e3  T : 10e12
 
 MODES
- -n : numeric   : output integer number of seconds in INTERVAL
- -s : shorthand : output string shorthand of INTERVAL
- -a : after     : output date plus INTERVAL
- -b : before    : output date minus INTERVAL
+ -a : after     : print current time plus INTERVAL
+ -b : before    : print current time minus INTERVAL
+ -c : numeric   : print integer number of seconds in INTERVAL
+ -d : shorthand : print string shorthand of INTERVAL
 
 OPTIONS
- -d TIME   : calculate dates relative to TIME
- -f FORMAT : render dates with printf using FORMAT
+ -f FORMAT : render dates with given strftime FORMAT
+ -t TIME   : calculate dates relative to TIME
 
 SAMPLE
  1d        : 86400 | 1Ms    : 1000000
@@ -35,8 +35,8 @@ SAMPLE
 EOF
     # mark current time
     local now
-    now=$(ts %s)
-    # time scales
+    now=$(tp %s)
+    # scale units
     declare -A scale
     scale=(
         ["D"]=$((10**1))
@@ -56,30 +56,29 @@ EOF
         ["m"]=60
         ["s"]=1
     )
+    # reverse lookup integer on scale
+    # declare -A rscale
+    # for key in "${!scale[@]}"; do rscale["${scale[$key]}"]="$key"; done
     # reverse lookup integer on unit
-    local revu
-    declare -A revu
-    for key in "${!unit[@]}"; do revu["${unit[$key]}"]="$key"; done
+    declare -A runit
+    for key in "${!unit[@]}"; do runit["${unit[$key]}"]="$key"; done
     # accept options
-    local mode=2 fmt="%s" when="$now"
+    local mode="" fmt="%s" when="$now"
     local opt OPTIND OPTARG
-    while getopts ":abd:f:hns" opt; do
+    while getopts ":abcdf:hs:t:u:" opt; do
         case "$opt" in
-            # program mode
-            a) mode=4 ;; # date after given interval
-            b) mode=3 ;; # date before given interval
-            n) mode=2 ;; # number of seconds in given interval
-            s) mode=1 ;; # shorthand string for given interval
-            # relative epoch for date calculation
-            d) when="$OPTARG" ;;
-            # format string for date output
-            f) fmt="$OPTARG" ;;
+            a) mode=1           ;; # output date after given interval
+            b) mode=2           ;; # output date before given interval
+            c) mode=3           ;; # output number of seconds in given interval
+            d) mode=4           ;; # output shorthand string for given interval
+            f) fmt="$OPTARG"    ;; # set format string for date output
+            t) when="$OPTARG"   ;; # set relative unix timestamp for date calculation
             h) # help
-                printf "%s\n" "$use" >&2
+                printf "%s\\n" "$use" >&2
                 return
                 ;;
             ?) # invalid?
-                printf "Invalid option '%s'\n%s\n" "$OPTARG" "$use" >&2
+                printf "Invalid option '%s'\\n%s\\n" "$OPTARG" "$use" >&2
                 return 1
                 ;;
         esac
@@ -88,35 +87,42 @@ EOF
     # accept arguments
     local inp="$*"
     if [ -z "$inp" ]; then
-        printf "%s\n" "$use" >&2
+        printf "%s\\n" "$use" >&2
         return
+    fi
+    # infer mode if not specified
+    if [ -z "$mode" ]; then
+        if [[ "$inp" =~ ^[:digit:]+$ ]]; then
+            mode=4
+        else
+            mode=3
+        fi
     fi
     # decode input string into integer seconds
     local num="" char="" secs=0 mul=1 idx=0
-    while read -r -n1 char; do
-        let idx++
+    for ((idx=0; idx<="${#inp}"; idx++)); do
+        char="${inp:$idx:1}"
         case "$char" in
-            " ")
-                # ignore whitespace
-                continue
-                ;;
-            [0-9])
-                # digit
+            [[:digit:]]) # accumulate digits
                 num="${num}${char}"
                 ;;
-            ["$(printf "%s" "${!scale[@]}")"])
-                # unit of scale
+            ["$(printf "%s" "${!scale[@]}")"]) # scale unit
                 mul="${scale[$char]}"
-                ;;
-            ["$(printf "%s" "${!unit[@]}")"])
-                # unit of time
+                (( idx++ ))
+                char="${inp:$idx:1}"
+                ;&
+            ["$(printf "%s" "${!unit[@]}")"]) # time unit
+                if [ -z "$char" ] || [ -z "${unit[$char]+exists}" ] ; then
+                    printf "Expected time unit not '%s' at index '%d'.\\n" "$char" "$idx" >&2
+                    return 2
+                fi
                 num="${num:-1}"
                 secs=$(( secs + (num * mul * unit["$char"]) ))
                 num=""
                 mul=1
                 ;;
-            ?)
-                printf "Failed to parse character '%s' at '%d'.\n" "$char" "$idx"
+            ?) # dunno
+                printf "Failed to parse character '%s' at '%d'.\\n" "$char" "$idx" >&2
                 return 2
             ;;
         esac
@@ -128,14 +134,14 @@ EOF
         per=$((left / val))
         left=$((left % val))
         if [[ "$per" -eq 0 ]]; then continue; fi
-        tstr+="${per}${revu[$val]}"
-    done < <(printf "%s\n" "${unit[@]}" | sort -r -n)
-    # output
+        tstr+="${per}${runit[$val]}"
+    done < <(printf "%s\\n" "${unit[@]}" | sort -r -n)
+    # output depends on mode
     case "$mode" in
-        1) printf "%s\n" "$tstr" ;;
-        2) printf "%d\n" "$secs" ;;
-        3) ts "$fmt" $(( when - secs )) ;;
-        4) ts "$fmt" $(( when + secs )) ;;
+        1) tp "$fmt" $(( when + secs )) ;;
+        2) tp "$fmt" $(( when - secs )) ;;
+        3) printf "%d\\n" "$secs" ;;
+        4) printf "%s\\n" "$tstr" ;;
     esac
 }
 
@@ -193,7 +199,7 @@ EOF
             n) # first N lines
                 num="$OPTARG"
                 if ! [[ "$num" =~ ^[0-9]+$ ]]; then
-                    printf "Argument to -n must be a number!\n" >&2
+                    printf "Argument to -n must be a number!\\n" >&2
                     return 3
                 fi
                 ;;
@@ -208,22 +214,22 @@ EOF
                 ;;
             y) # select files younger than the given interval
                 if ! yng=$(ti -b "$OPTARG"); then
-                    printf "Could not parse '%s' as a time interval.\n" "$OPTARG" >&2
+                    printf "Could not parse '%s' as a time interval.\\n" "$OPTARG" >&2
                     return 3
                 fi
                 ;;
             z) # select files older than than the given interval
                 if ! old=$(ti -b "$OPTARG"); then
-                    printf "Could not parse '%s' as a time interval.\n" "$OPTARG" >&2
+                    printf "Could not parse '%s' as a time interval.\\n" "$OPTARG" >&2
                     return 3
                 fi
                 ;;
             h) # help
-                printf "%s\n" "$use" >&2
+                printf "%s\\n" "$use" >&2
                 return
                 ;;
             \?) # invalid option
-                printf "Bad option: -%s.\n %s\n" "$OPTARG" "$use" >&2
+                printf "Bad option: -%s.\\n\\n%s\\n" "$OPTARG" "$use" >&2
                 return 2
                 ;;
         esac
@@ -233,7 +239,7 @@ EOF
     declare -a tgts
     for tgt in "$@"; do
         if ! [ -e "$tgt" ]; then
-            printf "'%s' does not exist\n%s\n" "$tgt" "$use" >&2
+            printf "'%s' does not exist\\n%s\\n" "$tgt" "$use" >&2
             return 3
         else
             tgts+=("$tgt")
@@ -251,7 +257,7 @@ EOF
         when=(" " "$a" "$c" "$m")
         # determine current time
         local now time since
-        now=$(ts %s)
+        now=$(tp %s)
         time="${when[$mode]}"
         since=$((now - time))
         # filter results maybe
@@ -259,14 +265,17 @@ EOF
         if [ -n "$old" ] && [[ "$old" -lt "$time" ]]; then continue; fi
         # output long or short
         if [ -n "$long" ]; then
-            printf "%(%F %T)T %s %s\n" "$time" "$(ti -s "$since")" "$f"
+            printf "%(%F %T)T %s %s\\n" "$time" "$(ti -d "$since")" "$f"
         else
-            printf "%s\n" "$f"
+            printf "%s\\n" "$f"
         fi
         # count a result
-        let ind++
-    done < <(eval find "${tgts[@]}" "${kind+-type \"\$kind\"}" "${pat+-iname \"\$pat\"}" '-printf "%As %Cs %Ts %p\n"' | \
-                 eval sort "${rev+-r}" -n -k "$mode")
+        (( ind++ ))
+    done < <(eval find "${tgts[@]@Q}" \
+                  "${kind+-type \"\$kind\"}" \
+                  "${pat+-iname \"\$pat\"}" \
+                  '-printf "%As %Cs %Ts %p\n"' \
+                 | eval sort "${rev+-r}" -n -k "$mode")
     # success if any results found
     (( ind > 0 ))
 }
